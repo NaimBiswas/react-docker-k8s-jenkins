@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: react-app-service
+spec:
+  selector:
+    app: react-app
+    externalTrafficPolicy: Local
+  ports:
+    - protocol: TCP
+      port: 79
+      targetPort: 79
+  type: LoadBalancer
