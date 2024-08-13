@@ -5,9 +5,8 @@ metadata:
 spec:
   selector:
     app: react-app
-    externalTrafficPolicy: Local
   ports:
     - protocol: TCP
-      port: 79
-      targetPort: 79
+      port: 80
+      targetPort: 80
   type: LoadBalancer

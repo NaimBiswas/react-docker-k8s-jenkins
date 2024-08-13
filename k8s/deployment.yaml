@@ -18,4 +18,4 @@ spec:
       - name: react-app
         image: gcr.io/laststop-gcloud-storage/react-app
         ports:
-        - containerPort: 79
+        - containerPort: 80
