@@ -1,0 +1,73 @@
+pipeline {
+    agent any
+    environment {
+        DOCKER_IMAGE = "gcr.io/laststop-gcloud-storage/react-app"
+        KUBE_DEPLOYMENT_NAME = "react-app"
+        KUBE_NAMESPACE = "default"
+    }
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git branch: 'main',  url: 'https://github.com/NaimBiswas/react-docker-k8s-jenkins.git'
+            }
+        }
+        stage('Build') {
+            steps {
+                script {
+                    sh 'npm install'
+                    sh 'npm run build'
+                }
+            }
+        }
+          
+        stage('Build Docker Image') {
+             steps {
+               script {
+					dockerImage = docker.build("$DOCKER_IMAGE:v$BUILD_NUMBER")
+                }
+            }
+        }
+        stage('Push Docker Image to GCR') {
+            steps {
+                script {
+                    docker.withRegistry("https://gcr.io", "google-container-registry") {
+                        dockerImage.push()
+                    }
+                }
+            }
+        }
+        stage('Deploy to Kubernetes') {
+            steps {
+                sh 'gcloud container clusters get-credentials gke-cluster --zone us-central1-a --project laststop-gcloud-storage'
+                sh '''
+                    kubectl set image deployment/react-app react-app=$DOCKER_IMAGE:v$BUILD_NUMBER
+                    kubectl rollout status deployment/react-app
+                    '''
+            }
+        }
+    }
+    post {
+        success {
+            emailext (
+                    subject: 'SUCCESS: Deployment to Kubernetes completed. Build Number: ${env.BUILD_NUMBER}', 
+                    body: """
+                    <html><head> <style> body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; } .container { background-color: #02A676; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); max-width: 600px; margin: 0 auto; padding: 20px; } .header { text-align: center; background-color: #4caf50; color: #ffffff; padding: 10px 0; border-radius: 8px 8px 0 0; } .header h1 { margin: 0; font-size: 24px; } .content { padding: 20px; } .content p { font-size: 16px; line-height: 1.5; margin: 0 0 10px; } .content p span { font-weight: bold; } .footer { text-align: center; padding: 10px 0; color: #777777; font-size: 14px; border-top: 1px solid #dddddd; } </style></head><body> <div class="container"> <div class="header"> <h1>Deployment Successful!</h1> </div> <div class="content"> <p>Dear Team,</p> <p>The deployment to the Kubernetes cluster has been successfully completed.</p> <p><span>Project Name:</span> $KUBE_DEPLOYMENT_NAME</p> <p><span>Environment:</span> $ENVIRONMENT</p> <p><span>Deployment Time:</span> $DEPLOYMENT_TIME</p> <p><span>Deployed By:</span> $DEPLOYED_BY</p> <p><span>Version:</span> $VERSION</p> <p>You can now access the updated application at the following URL:</p> <p><a href="${APPLICATION_URL}" target="_blank">${APPLICATION_URL}</a></p> </div> <div class="footer"> <p>Thank you,</p> <p>The DevOps Team</p> </div> </div></body></html>
+                    """, 
+                    to: 'naimbiswas221@gmail.com', 
+                    from:"support@laststop.live",
+                    recipientProviders: [[$class: 'DevelopersRecipientProvider']]  
+            )
+        }
+        failure {
+            emailext(
+                    subject: "FAILURE: Deployment to Kubernetes failed. Build Number: ${env.BUILD_NUMBER}",
+                    body: """
+                    <!DOCTYPE html><html lang="en"><head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title>Deployment Failure</title> <style> body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; } .container { background-color: #FF5A33; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); max-width: 600px; margin: 0 auto; padding: 20px; } .header { text-align: center; background-color: red; color: #ffffff; padding: 10px 0; border-radius: 8px 8px 0 0; } .header h1 { margin: 0; font-size: 24px; } .content { padding: 20px; } .content p { font-size: 16px; line-height: 1.5; margin: 0 0 10px; } .content p span { font-weight: bold; } .footer { text-align: center; padding: 10px 0; color: #777777; font-size: 14px; border-top: 1px solid #dddddd; } </style></head><body> <div class="container"> <div class="header"> <h1>Deployment Failed</h1> </div> <div class="content"> <p>Dear Team,</p> <p>Unfortunately, the deployment to the Kubernetes cluster has failed.</p> <p><span>Project Name:</span> $KUBE_DEPLOYMENT_NAME</p> <p><span>Environment:</span> $ENVIRONMENT</p> <p><span>Deployment Time:</span> $DEPLOYMENT_TIME</p> <p><span>Triggered By:</span> $DEPLOYED_BY</p> <p><span>Version:</span> $VERSION</p> <p>Please review the Jenkins logs for more details on the failure:</p> <p><a href="$BUILD_URL" target="_blank">View Jenkins Build Logs</a></p> <p>Immediate attention is required to resolve the issue and proceed with the deployment.</p> </div> <div class="footer"> <p>Thank you,</p> <p>Naim Biswas</p> </div> </div></body></html>
+                    """,
+                    to: 'naimbiswas221@gmail.com',
+                    from:"support@laststop.live",
+                    recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+                )
+        }
+    }
+}
